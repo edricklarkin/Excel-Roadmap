@@ -1,0 +1,78 @@
+
+function main(workbook: ExcelScript.Workbook) {
+  //define the sheet variables
+	const inputSheet = workbook.getWorksheet("Input");
+	const roadSheet = workbook.getWorksheet("Roadmap");
+  const userInput = inputSheet.getRange("input");
+
+  //Unprotect sheet
+  inputSheet.getProtection().unprotect("");
+
+  //sort user input
+  userInput.getSort().apply([{ key: 6, ascending: true }, { key: 0, ascending: true }], false, false, ExcelScript.SortOrientation.rows);
+
+  //protect sheet
+  inputSheet.getProtection().protect();
+    
+  //Get user input
+  let p = userInput.getValues();
+
+  //Assigned row on roadmap, always start on one
+  p[0][5] = 1;
+    
+  //Starting value of first end PI
+  var row_end: number[] = [];
+  row_end[0] = p[0][1];
+
+  //index for start of swimline
+  let swim = 0;
+
+  //index for current row
+  let i = 1;
+
+  //Iterate thorough each row
+  while (p[i][0] != ""){
+
+    //Update start of swimline if current swimline doesn't match prior
+    if(p[i][4] != p[i-1][4]){
+      //next swimlaine starts at a new row end
+      swim = row_end.length;
+      //add a new row end
+      row_end.push(0);
+    }
+
+    //Can't use the length of an array in for loop or it hangs
+    z = row_end.length;
+
+    //Loop through each row end date
+    for (let x = swim; x < z; x++){
+        
+      //If object's start PI is greater than a row's end PI
+      if(p[i][0] > row_end[x]){
+          
+        //Update row end with new end PI
+        row_end[x] = p[i][1];
+
+        //Assign row to the object
+        p[i][5] = x + 1;
+        break;
+      }
+
+      //If at the end of row end array add a new row with new row end PI
+      if(x == z - 1){
+        row_end.push(p[i][1]);
+        p[i][5] = row_end.length;
+      }
+    }
+
+    i = i + 1;
+  }
+
+  //Send results back to sheet
+  for(x=0; x < p.length; x++){
+    userInput.getCell(x,5).setValue(p[x][5]);
+
+  }
+}
+
+
