@@ -1,0 +1,215 @@
+function main(workbook: ExcelScript.Workbook) {
+	
+	//define the sheet variables
+	const inputSheet = workbook.getWorksheet("Input");
+	const roadSheet = workbook.getWorksheet("Roadmap");
+
+	//Unprotect sheet
+	inputSheet.getProtection().unprotect("");
+	//roadSheet.getProtection().unprotect("")
+
+	//sort user input
+	var userInput = inputSheet.getRange("Input");
+	userInput.getSort().apply([{ key: 6, ascending: true }, { key: 0, ascending: true }], false, false, ExcelScript.SortOrientation.rows);
+
+	//get user input
+	var userInput = inputSheet.getRange("Input").getValues();
+	var starts: number[] = [];
+	var ends: number[] = [];
+	var rows: number[] = [];
+	var names: string[] = [];
+	var cats: string[] = [];
+	var swims: string[] = [];
+
+	//fit user values into arrays
+	for(i = 0; i < userInput.length; i++){
+		starts.push(userInput[i][0]);
+		ends.push(userInput[i][1]);
+		names.push(userInput[i][2]);
+		cats.push(userInput[i][3]);
+		swims.push(userInput[i][4]);
+		rows.push(userInput[i][5]);
+}
+
+	//start and end rows for swimlaine formating
+	var startSwim: number[] = [rows[0]];
+	var endSwim: number[] = [rows[0]];
+	var nameSwim: string[] = [swims[0]];
+
+	//Capture font size inputs
+	var font = inputSheet.getRange("Font").getFormat().getFont().getName();
+	var f_size = inputSheet.getRange("Font").getFormat().getFont().getSize();
+	
+	//create array of strings for catagory color fill and text color
+	const catColors = inputSheet.getRange("Color_Code");
+	var fillColors: string[] = [];
+	var textColor: string[] = [];
+
+	//Loop through catagory input and match to fill and font color
+	var i = 0;
+
+	while (cats[i] != "") {
+
+		// match catagory value and get associated fill and font colors
+		for (x = 0; x < catColors.getRowCount(); x++) {
+			if(cats[i] == catColors.getCell(x, 0).getValue()){
+				fillColors.push(catColors.getCell(x, 0).getFormat().getFill().getColor());
+				textColor.push(catColors.getCell(x, 0).getFormat().getFont().getColor());
+				break;
+			}
+		}
+			//advance to next row in catagory
+			i = i+1
+	}
+
+	//Loop through swimlanes and identify start and end swimlane rows
+	i = 1;
+
+	while(swims[i] != ""){
+		
+		if (swims[i] != swims[i-1]){
+			//add swimlane object with start and end rows and name
+			startSwim.push(rows[i]);
+			endSwim.push(rows[i]);
+			nameSwim.push(swims[i]);
+
+		}
+
+		//update swimlane end if row if higher
+		if (endSwim[endSwim.length - 1] < rows[i]) { endSwim[endSwim.length - 1] = rows[i] }
+
+		i = i + 1;
+
+	}
+
+	//Delete prior objects if their name start with proj as created by a prior run
+	for (x = 0; x < 200; x++) {
+		try {
+			roadSheet.getShape("proj_" + x).delete();
+		}
+		catch {
+			break;
+		}
+	}
+
+	//loop through the entered projects and create objects
+	i = 0;
+
+	while (starts[i] != "") {
+
+		//Set the range based for entering the project box based on start and end PIs
+		//Always one row
+		let cell = roadSheet.getRangeByIndexes(rows[i] + 5, starts[i] - 23, 1, (1 + ends[i] - starts[i]));
+
+		//Get hight for auto text sizing
+		let height = cell.getHeight();
+		
+		//Create an object in the specified range
+		let rec = roadSheet.addGeometricShape(ExcelScript.GeometricShapeType.roundRectangle);
+		rec.setLeft(cell.getLeft());
+		rec.setTop(cell.getTop());
+		rec.setHeight(height);
+		rec.setWidth(cell.getWidth());
+
+		//Set fill color of object based on catagory and all white outline
+		rec.getFill().setForegroundColor(fillColors[i]);
+		rec.getLineFormat().setColor("#FFFFFF");
+
+		//Set text within oject
+		rec.getTextFrame().getTextRange().setText(names[i]);
+
+		//format text
+		rec.getTextFrame().getTextRange().getFont().setSize(f_size);
+		rec.getTextFrame().getTextRange().getFont().setName(font);
+
+		//Center text within object, top vertical to not move object placement
+		rec.getTextFrame().setHorizontalAlignment(ExcelScript.ShapeTextHorizontalAlignment.center);
+		rec.getTextFrame().setVerticalAlignment(ExcelScript.ShapeTextVerticalAlignment.top);
+
+		//Set text color
+		rec.getTextFrame().getTextRange().getFont().setColor(textColor[i]);
+
+		//Set margin
+		rec.getTextFrame().setTopMargin(0.1);
+		rec.getTextFrame().setBottomMargin(0.1);
+		rec.getTextFrame().setLeftMargin(0.1);
+		rec.getTextFrame().setRightMargin(0.1);
+
+		//Autosize text
+		rec.getTextFrame().setAutoSizeSetting(ExcelScript.ShapeAutoSize.autoSizeShapeToFitText);
+
+		//If object is shorter than the row resize to row hight, else loop until <= row height
+		if (rec.getHeight() <= height){
+			rec.getTextFrame().setAutoSizeSetting(ExcelScript.ShapeAutoSize.autoSizeNone);
+			rec.setHeight(height);
+			rec.getTextFrame().setVerticalAlignment(ExcelScript.ShapeTextVerticalAlignment.middle);}
+
+			else{
+
+				while (rec.getHeight() > height){
+					size = rec.getTextFrame().getTextRange().getFont().getSize();
+					rec.getTextFrame().getTextRange().getFont().setSize(size - 0.5);
+					rec.getTextFrame().setAutoSizeSetting(ExcelScript.ShapeAutoSize.autoSizeShapeToFitText);
+				}
+
+				rec.setHeight(height);
+			rec.getTextFrame().setVerticalAlignment(ExcelScript.ShapeTextVerticalAlignment.middle);
+			}
+
+
+		//give object a unique name
+		rec.setName("proj_" + i )
+
+		//advance index
+		i = i+1
+
+	}
+
+	//Remove any existing merged cells
+	const allSwims = roadSheet.getRange("SwimNames");
+	const wholeRoadmap = roadSheet.getRange("Whole_Roadmap");
+
+	allSwims.unmerge();
+	allSwims.clear(ExcelScript.ClearApplyTo.contents);
+
+	//Correct swimlane name borders
+	allSwims.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setColor("#FFFFFF");
+	allSwims.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeRight).setColor("#FFFFFF");
+	allSwims.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeTop).setColor("#FFFFFF");
+	allSwims.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setColor("#FFFFFF");
+	allSwims.getFormat().getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setColor("#FFFFFF");
+
+
+	//Correct roadmap boarders
+	wholeRoadmap.getFormat().getRangeBorder(ExcelScript.BorderIndex.insideHorizontal).setStyle(ExcelScript.BorderLineStyle.none);
+
+
+	//Create swimlanes on the roadmap
+	for(x = 0; x < startSwim.length; x++){
+		let selectedSwimName = roadSheet.getRangeByIndexes(startSwim[x] + 5, 3, endSwim[x] - startSwim[x] + 1, 1);
+		let selectedSwimRow = roadSheet.getRangeByIndexes(startSwim[x] + 5, 3, endSwim[x] - startSwim[x] + 1, 25);
+
+		//merge and and text to swimlaines
+		selectedSwimName.merge();
+		selectedSwimName.setValue(nameSwim[x]);
+
+		//format swimlanes name
+		selectedSwimName.getFormat().setTextOrientation(90);
+		selectedSwimName.getFormat().setHorizontalAlignment(ExcelScript.HorizontalAlignment.center);
+		selectedSwimName.getFormat().setVerticalAlignment(ExcelScript.VerticalAlignment.center);
+		selectedSwimName.getFormat().getFill().setColor("#002060");
+		selectedSwimName.getFormat().getFont().setColor("#FFFFFF");
+
+		//Format swimlane rows
+		selectedSwimRow.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeLeft).setColor("#FFFFFF");
+		selectedSwimRow.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeRight).setColor("#FFFFFF");
+		selectedSwimRow.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeTop).setColor("#FFFFFF");
+		selectedSwimRow.getFormat().getRangeBorder(ExcelScript.BorderIndex.edgeBottom).setColor("#FFFFFF");
+
+	}
+
+	//protect sheet
+	inputSheet.getProtection().protect();
+	//roadSheet.getProtection().protect();
+
+}
